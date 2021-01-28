@@ -1,13 +1,15 @@
+require("dotenv").config();
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const dateFormat = require("dateformat");
 const morgan = require("morgan");
+const Contact = require("./models/contact");
 
 const app = express();
 
 app.use(cors());
-app.use(express.static("build"));
 app.use(bodyParser.json());
 app.use(
   morgan(":method :url :status :res[content-length] - :response-time ms :data")
@@ -19,6 +21,16 @@ morgan.token("data", (req) => {
 
 const unknownEndpoint = (request, response) => {
   response.status(404).send({ error: "unknown endpoint" });
+};
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message);
+
+  if (error.name === "CastError") {
+    return response.status(400).send({ error: "malformatted id" });
+  }
+
+  next(error);
 };
 
 let persons = [
@@ -44,69 +56,78 @@ let persons = [
   },
 ];
 
-app.get("/", (req, res) => {
-  let today = new Date();
-  today = dateFormat(today, "dddd, mmmm dS, yyyy, h:MM:ss TT");
-  res.send(
-    `<p>Phonebook has info for ${persons.length} people</p> <p>${today}</p>`
-  );
-});
+// app.get("/", (req, res) => {
+//   let today = new Date();
+//   today = dateFormat(today, "dddd, mmmm dS, yyyy, h:MM:ss TT");
+//   res.send(
+//     `<p>Phonebook has info for ${persons.length} people</p> <p>${today}</p>`
+//   );
+// });
 
 app.get("/api/persons", (req, res) => {
-  res.json(persons);
+  Contact.find({}).then((contacts) => {
+    res.json(contacts.map((contact) => contact.toJSON()));
+  });
 });
 
 app.post("/api/persons", (req, res) => {
   const body = req.body;
 
   if (!body.name || !body.number) {
-    return response.status(400).json({
+    return res.status(400).json({
       error: "content missing",
     });
   }
 
-  persons.map((person) => {
-    if (person.name === body.name) {
-      return res.status(400).json({
-        error: "Name must be unique",
-      });
-    }
-  });
-
-  const newPerson = {
+  const contact = new Contact({
     name: body.name,
     number: body.number,
-    id: Math.floor(Math.random() * Math.floor(100000)),
-  };
+  });
 
-  persons = persons.concat(newPerson);
-
-  res.json(person);
+  contact
+    .save()
+    .then((savedContact) => {
+      res.json(savedContact.toJSON());
+    })
+    .catch((error) => console.log(error.response.data));
 });
 
-app.get("/api/persons/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const person = persons.find((person) => person.id === id);
-  if (person) {
-    res.json(person);
-  } else {
-    res.status(404).end();
-  }
+app.put("/api/persons/:id", (req, res, next) => {
+  Person.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    .then((updatedPerson) => {
+      res.json(updatedPerson.toJSON());
+    })
+    .catch((error) => next(error));
 });
 
-app.delete("/api/persons/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const person = person.filter((person) => person.id !== id);
+app.get("/api/persons/:id", (req, res, next) => {
+  Contact.findById(req.params.id)
+    .then((contact) => {
+      if (contact) {
+        res.json(contact.toJSON());
+      } else {
+        res.status(404).end();
+      }
+    })
+    .catch((error) => next(error));
+});
 
-  res.status(204).end();
+app.delete("/api/persons/:id", (req, res, next) => {
+  Contact.findByIdAndRemove(req.params.id)
+    .then((result) => {
+      res.status(204).end();
+    })
+    .catch((error) => next(error));
 });
 
 app.use(unknownEndpoint);
+app.use(errorHandler);
 
-// const __dirname = path.resolve();
+__dirname = path.resolve();
 
+console.log(path.join(__dirname, "../frontend/build"));
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "/frontend/build")));
+  app.use(express.static(path.join(__dirname, "../frontend/build")));
 
   app.get("*", (req, res) =>
     res.sendFile(path.resolve(__dirname, "frontend", "build", "index.html"))

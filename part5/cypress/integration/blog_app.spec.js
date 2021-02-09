@@ -35,8 +35,8 @@ describe("Blog app", function () {
   });
 });
 
-describe("When logged in", function () {
-  it("a new blog can be created", function () {
+describe("When user is logged in", function () {
+  it("new blog can be created", function () {
     cy.get("new-blog").click();
     cy.get("#author").type("Author");
     cy.get("#title").type("Title");
